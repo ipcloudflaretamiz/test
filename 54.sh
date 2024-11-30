@@ -303,6 +303,25 @@ EOF
     press_enter
 }
 
+remove_tunnel() {
+    clear
+    echo -e "${RED}Are you sure you want to remove the tunnel? This will stop and disable the services.${NC}"
+    read -p "Type 'yes' to confirm: " confirm
+
+    if [ "$confirm" == "yes" ]; then
+        systemctl stop udp2raw-s.service
+        systemctl disable udp2raw-s.service
+        rm -f /etc/systemd/system/udp2raw-s.service
+        systemctl stop udp2raw-c.service
+        systemctl disable udp2raw-c.service
+        rm -f /etc/systemd/system/udp2raw-c.service
+        systemctl daemon-reload
+        echo -e "${GREEN}Tunnel removed successfully.${NC}"
+    else
+        echo -e "${RED}Removal canceled.${NC}"
+    fi
+}
+
 clear
 echo -e "${CYAN}UDP2RAW Configuration Setup${NC}"
 echo -e "${GREEN}-------------------------------------${NC}"
@@ -311,9 +330,10 @@ echo -e "${RED}2${NC}. ${YELLOW}Configure Remote Server (EU)${NC}"
 echo -e "${RED}3${NC}. ${YELLOW}Configure Local Server (IR)${NC}"
 echo -e "${RED}4${NC}. ${YELLOW}Show Status of UDP2RAW Services${NC}"
 echo -e "${RED}5${NC}. ${YELLOW}Optimize System for Gaming and Low-Latency${NC}"
+echo -e "${RED}6${NC}. ${YELLOW}Remove Tunnel${NC}"
 echo -e "${RED}0${NC}. ${YELLOW}Exit${NC}"
 echo -e "${GREEN}-------------------------------------${NC}"
-echo -ne "${CYAN}Enter your choice [0-5]: ${NC}"
+echo -ne "${CYAN}Enter your choice [0-6]: ${NC}"
 
 read choice
 
@@ -334,10 +354,13 @@ case $choice in
     5)
         optimize_for_gaming
         ;;
+    6)
+        remove_tunnel
+        ;;
     0)
         exit 0
         ;;
     *)
-        echo -e "${RED}Invalid choice, please choose between 0-5.${NC}"
+        echo -e "${RED}Invalid choice, please choose between 0-6.${NC}"
         ;;
 esac
