@@ -315,12 +315,25 @@ optimize_for_ping() {
 
     # Disabling unnecessary services for network optimization
     echo -e "${YELLOW}Disabling unnecessary services for better performance...${NC}"
-    systemctl stop avahi-daemon
-    systemctl disable avahi-daemon
-    systemctl stop bluetooth
-    systemctl disable bluetooth
-    systemctl stop apache2
-    systemctl disable apache2
+    
+    # Check if the service exists before trying to stop/disable it
+    if systemctl list-units --type=service | grep -q 'avahi-daemon.service'; then
+        systemctl stop avahi-daemon
+        systemctl disable avahi-daemon
+        echo -e "${GREEN}avahi-daemon service stopped and disabled.${NC}"
+    fi
+
+    if systemctl list-units --type=service | grep -q 'bluetooth.service'; then
+        systemctl stop bluetooth
+        systemctl disable bluetooth
+        echo -e "${GREEN}bluetooth service stopped and disabled.${NC}"
+    fi
+
+    if systemctl list-units --type=service | grep -q 'apache2.service'; then
+        systemctl stop apache2
+        systemctl disable apache2
+        echo -e "${GREEN}apache2 service stopped and disabled.${NC}"
+    fi
 
     # Adjusting MTU size for better gaming performance
     echo -e "${YELLOW}Optimizing MTU size for gaming...${NC}"
@@ -342,6 +355,7 @@ optimize_for_ping() {
     echo -e "${GREEN}Ping and gaming optimizations applied successfully!${NC}"
     echo -e "\n${GREEN}You may need to restart your server for some changes to take effect.${NC}"
 }
+
 
 # Main menu for the script
 clear
