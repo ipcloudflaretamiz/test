@@ -2,7 +2,7 @@ CYAN="\e[96m"
 GREEN="\e[92m"
 YELLOW="\e[93m"
 RED="\e[91m"
-BLUE="\e[94m"
+BLUE="\e[94m "
 MAGENTA="\e[95m"
 NC="\e[0m"
 
@@ -10,6 +10,38 @@ press_enter() {
     echo -e "\n${RED}Press Enter to continue... ${NC}"
     read
 }
+
+display_fancy_progress() {
+    local duration=$1
+    local sleep_interval=0.1
+    local progress=0
+    local bar_length=40
+
+    while [ $progress -lt $duration ]; do
+        echo -ne "\r[${YELLOW}"
+        for ((i = 0; i < bar_length; i++)); do
+            if [ $i -lt $((progress * bar_length / duration)) ]; then
+                echo -ne "▓"
+            else
+                echo -ne "░"
+            fi
+        done
+        echo -ne "${RED}] ${progress}%${NC}"
+        progress=$((progress + 1))
+        sleep $sleep_interval
+    done
+    echo -ne "\r[${YELLOW}"
+    for ((i = 0; i < bar_length; i++)); do
+        echo -ne "#"
+    done
+    echo -ne "${RED}] ${progress}%${NC}"
+    echo
+}
+
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\n ${RED}This script must be run as root.${NC}"
+    exit 1
+fi
 
 install() {
     clear
@@ -27,51 +59,54 @@ install() {
     done
     echo ""
     apt-get update > /dev/null 2>&1
-    apt-get install curl wget build-essential -y > /dev/null 2>&1 # added to ensure curl is installed
-    echo -e "${GREEN}Packages installed successfully.${NC}"
-
-    # Download udp2raw binary
-    cd /root
-    curl -L -o udp2raw_amd64 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_amd64
-    curl -L -o udp2raw_x86 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_x86
-    chmod +x udp2raw_amd64
-    sudo mv udp2raw_amd64 /usr/local/bin/udp2raw
-
-    # Verify installation
-    if ! command -v udp2raw &> /dev/null; then
-        echo -e "${RED}udp2raw installation failed!${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}udp2raw installed successfully.${NC}"
-}
-
-remove_tunnel() {
-    echo -e "\n${YELLOW}Removing UDP2RAW tunnel...${NC}"
-    systemctl stop udp2raw-s.service udp2raw-c.service
-    systemctl disable udp2raw-s.service udp2raw-c.service
-    rm -f /etc/systemd/system/udp2raw-s.service /etc/systemd/system/udp2raw-c.service
-    systemctl daemon-reload
-    echo -e "${GREEN}UDP2RAW tunnel has been removed.${NC}"
-}
-
-view_status() {
-    echo -e "\n${CYAN}Checking UDP2RAW service status...${NC}"
-    systemctl status udp2raw-s.service
-    systemctl status udp2raw-c.service
+    display_fancy_progress 20
     echo ""
+    system_architecture=$(uname -m)
+
+if [ "$system_architecture" != "x86_64" ] && [ "$system_architecture" != "amd64" ]; then
+    echo "Unsupported architecture: $system_architecture"
+    exit 1
+fi
+
+sleep 1
+    echo ""
+    echo -e "${YELLOW}Downloading and installing udp2raw for architecture: $system_architecture${NC}"
+curl -L -o udp2raw_amd64 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_amd64
+curl -L -o udp2raw_x86 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_x86
+sleep 1
+
+chmod +x udp2raw_amd64
+chmod +x udp2raw_x86
+
+echo ""
+echo -e "${GREEN}Enabling IP forwarding...${NC}"
+display_fancy_progress 20
+echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+echo "net.ipv6.conf.all.forwarding = 1" >> /etc/sysctl.conf
+sysctl -p > /dev/null 2>&1
+ufw reload > /dev/null 2>&1
+echo ""
+echo -e "${GREEN}All packages were installed and configured.${NC}"
 }
 
-optimize_for_gaming() {
-    echo -e "${YELLOW}Optimizing for gaming...${NC}"
-    echo -e "${CYAN}Activating TCP BBR for better latency...${NC}"
-    sysctl -w net.ipv4.tcp_congestion_control=bbr
-    sysctl -w net.core.default_qdisc=fq
-    sysctl -w net.ipv4.tcp_mtu_probing=1
-    sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
-    sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216"
-    sysctl -p
-    echo -e "${GREEN}Gaming optimizations complete.${NC}"
+validate_port() {
+    local port="$1"
+    local exclude_ports=()
+    local wireguard_port=$(awk -F'=' '/ListenPort/ {gsub(/ /,"",$2); print $2}' /etc/wireguard/*.conf)
+    exclude_ports+=("$wireguard_port")
+
+    if [[ " ${exclude_ports[@]} " =~ " $port " ]]; then
+        return 0  
+    fi
+
+    if ss -tuln | grep -q ":$port "; then
+        echo -e "${RED}Port $port is already in use. Please choose another port.${NC}"
+        return 1
+    fi
+
+    return 0
 }
+
 remote_func() {
     clear
     echo ""
@@ -172,7 +207,6 @@ EOF
     sleep 1
 
     echo -e "\e[92mRemote Server (EU) configuration has been adjusted and service started. Yours truly${NC}"
-echo ""
 }
 
 local_func() {
@@ -197,7 +231,6 @@ local_func() {
             echo -e "${RED}Invalid choice, choose correctly ...${NC}"
             ;;
     esac
-
     while true; do
         echo -ne "\e[33mEnter the Local server (IR) port \e[92m[Default: 443]${NC}: "
         read remote_port
@@ -222,15 +255,9 @@ local_func() {
             break
         fi
     done
-
-    while true; do
-        echo -ne "\e[33mEnter the Password for UDP2RAW \e[92m[This will be used on your local server (IR)]${NC}: "
-        read password
-        if [ ! -z "$password" ]; then
-            break
-        fi
-    done
-
+    echo ""
+    echo -ne "\e[33mEnter the Remote server (EU) IPV6 / IPV4 (Based on your tunnel preference)\e[92m[This will be used on your server]${NC}: "
+    read password
     echo ""
     echo -e "\e[33m protocol (Mode) (Local and remote should be the same)${NC}"
     echo ""
@@ -264,7 +291,7 @@ Description=udp2raw-c Service
 After=network.target
 
 [Service]
-ExecStart=/root/udp2raw_amd64 -c -l ${tunnel_mode}:${remote_port} -r 127.0.0.1:${local_port} -k "${password}" --raw-mode ${raw_mode} -a
+ExecStart=/root/udp2raw_amd64 -c -l $tunnel_mode:$local_port -r $password:$remote_port -k "${password}" --raw-mode ${raw_mode} -a
 
 Restart=always
 
@@ -278,24 +305,54 @@ EOF
     systemctl enable --now "udp2raw-c.service"
     systemctl start --now "udp2raw-c.service"
     sleep 1
-
-    echo -e "\e[92mLocal Server (IR) configuration has been adjusted and service started. Yours truly${NC}"
-    press_enter
+    echo -e "\e[92mYour local (IR) server is running successfully!${NC}"
 }
 
-clear
-echo -e "${CYAN}UDP2RAW Configuration Setup${NC}"
-echo -e "${GREEN}-------------------------------------${NC}"
-echo -e "${RED}1${NC}. ${YELLOW}Install UDP2RAW${NC}"
-echo -e "${RED}2${NC}. ${YELLOW}Configure Remote Server (EU)${NC}"
-echo -e "${RED}3${NC}. ${YELLOW}Configure Local Server (IR)${NC}"
-echo -e "${RED}4${NC}. ${YELLOW}Remove UDP2RAW Tunnel${NC}"
-echo -e "${RED}5${NC}. ${YELLOW}Optimize for Gaming${NC}"
-echo -e "${RED}6${NC}. ${YELLOW}View UDP2RAW Service Status${NC}"
-echo -e "${RED}0${NC}. ${YELLOW}Exit${NC}"
-echo -e "${GREEN}-------------------------------------${NC}"
-echo -ne "${CYAN}Enter your choice [0-6]: ${NC}"
+optimize_for_ping() {
+    clear
+    echo -e "\n${CYAN}Optimizing for Low Ping and Gaming Performance...${NC}"
+    echo ""
 
+    # Disabling unnecessary services for network optimization
+    echo -e "${YELLOW}Disabling unnecessary services for better performance...${NC}"
+    systemctl stop avahi-daemon
+    systemctl disable avahi-daemon
+    systemctl stop bluetooth
+    systemctl disable bluetooth
+    systemctl stop apache2
+    systemctl disable apache2
+
+    # Adjusting MTU size for better gaming performance
+    echo -e "${YELLOW}Optimizing MTU size for gaming...${NC}"
+    ifconfig eth0 mtu 1450 up  # Adjust to your interface (eth0 or wlan0)
+
+    # Enabling TCP/UDP optimizations for lower latency
+    echo -e "${YELLOW}Optimizing TCP congestion control algorithm...${NC}"
+    sysctl -w net.ipv4.tcp_congestion_control=bbr
+
+    # Apply QoS to prioritize gaming traffic
+    echo -e "${YELLOW}Setting up QoS for gaming traffic...${NC}"
+    tc qdisc add dev eth0 root handle 1: htb default 12
+    tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit
+    tc class add dev eth0 parent 1:1 classid 1:10 htb rate 100mbit
+
+    # Save changes to sysctl
+    sysctl -p > /dev/null 2>&1
+
+    echo -e "${GREEN}Ping and gaming optimizations applied successfully!${NC}"
+    echo -e "\n${GREEN}You may need to restart your server for some changes to take effect.${NC}"
+}
+
+# Main menu for the script
+clear
+echo -e "${CYAN}Select an option from the menu:${NC}"
+echo -e "1) Install udp2raw"
+echo -e "2) Setup Remote Tunnel"
+echo -e "3) Setup Local Tunnel"
+echo -e "4) Uninstall udp2raw"
+echo -e "5) Optimize for Low Ping & Gaming Performance"
+echo -e "0) Exit"
+echo -ne "Enter your choice [0-5]: "
 read choice
 
 case $choice in
@@ -309,18 +366,16 @@ case $choice in
         local_func
         ;;
     4)
-        remove_tunnel
+        uninstall
         ;;
     5)
-        optimize_for_gaming
-        ;;
-    6)
-        view_status
+        optimize_for_ping
         ;;
     0)
+        echo -e "\n ${RED}Exiting...${NC}"
         exit 0
         ;;
     *)
-        echo -e "${RED}Invalid choice, please choose between 0-6.${NC}"
+        echo -e "\n ${RED}Invalid choice. Please enter a valid option.${NC}"
         ;;
 esac
