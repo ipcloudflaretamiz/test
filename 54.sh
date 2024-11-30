@@ -71,22 +71,25 @@ fi
 sleep 1
     echo ""
     echo -e "${YELLOW}Downloading and installing udp2raw for architecture: $system_architecture${NC}"
-curl -L -o udp2raw_amd64 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_amd64
-curl -L -o udp2raw_x86 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_x86
-sleep 1
 
-chmod +x udp2raw_amd64
-chmod +x udp2raw_x86
+    if [ "$system_architecture" == "x86_64" ] || [ "$system_architecture" == "amd64" ]; then
+        curl -L -o udp2raw https://github.com/yinghuocho/udp2raw/releases/download/v2020.07.09/udp2raw_amd64 -O
+    fi
 
-echo ""
-echo -e "${GREEN}Enabling IP forwarding...${NC}"
-display_fancy_progress 20
-echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
-echo "net.ipv6.conf.all.forwarding = 1" >> /etc/sysctl.conf
-sysctl -p > /dev/null 2>&1
-ufw reload > /dev/null 2>&1
-echo ""
-echo -e "${GREEN}All packages were installed and configured.${NC}"
+    sleep 1
+
+chmod +x udp2raw
+echo -e "${GREEN}File udp2raw installed successfully!${NC}"
+
+    echo ""
+    echo -e "${GREEN}Enabling IP forwarding...${NC}"
+    display_fancy_progress 20
+    echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.all.forwarding = 1" >> /etc/sysctl.conf
+    sysctl -p > /dev/null 2>&1
+    ufw reload > /dev/null 2>&1
+    echo ""
+    echo -e "${GREEN}All packages were installed and configured.${NC}"
 }
 
 validate_port() {
@@ -220,7 +223,7 @@ Description=udp2raw-s Service
 After=network.target
 
 [Service]
-ExecStart=/root/udp2raw_amd64 -s -l $tunnel_mode:${local_port} -r 127.0.0.1:${remote_port} -k "${password}" --raw-mode ${raw_mode} -a
+ExecStart=/root/udp2raw -s -l $tunnel_mode:${local_port} -r 127.0.0.1:${remote_port} -k "${password}" --raw-mode ${raw_mode} -a
 
 Restart=always
 
@@ -240,6 +243,7 @@ EOF
 
 local_func() {
     clear
+    echo ""
     echo -e "\e[33mSet up the local server for IR${NC}"
     echo ""
     echo -ne "Enter the Remote server address (EU) : ${CYAN}"
@@ -283,7 +287,7 @@ Description=udp2raw-c Service
 After=network.target
 
 [Service]
-ExecStart=/root/udp2raw_amd64 -c -l 0.0.0.0:${local_port} -r $remote_address:$remote_port -k "${password}" --raw-mode ${raw_mode} -a
+ExecStart=/root/udp2raw -c -l 0.0.0.0:${local_port} -r $remote_address:$remote_port -k "${password}" --raw-mode ${raw_mode} -a
 
 Restart=always
 
