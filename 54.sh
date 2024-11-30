@@ -27,8 +27,24 @@ install() {
     done
     echo ""
     apt-get update > /dev/null 2>&1
-    apt-get install curl wget -y > /dev/null 2>&1 # added to ensure curl is installed
+    apt-get install curl wget build-essential -y > /dev/null 2>&1 # added to ensure curl is installed
+
     echo -e "${GREEN}Packages installed successfully.${NC}"
+
+    # Download udp2raw binary
+    cd /root
+    wget https://github.com/wangyu-/udp2raw-tunnel/releases/download/v0.20190111/udp2raw_amd64
+    chmod +x udp2raw_amd64
+    sudo mv udp2raw_amd64 /usr/local/bin/udp2raw
+
+    # Verify installation
+    if ! command -v udp2raw &> /dev/null
+    then
+        echo -e "${RED}udp2raw installation failed!${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}udp2raw installed successfully.${NC}"
 }
 
 remove_tunnel() {
@@ -58,7 +74,6 @@ optimize_for_gaming() {
     sysctl -p
     echo -e "${GREEN}Gaming optimizations complete.${NC}"
 }
-
 remote_func() {
     clear
     echo ""
