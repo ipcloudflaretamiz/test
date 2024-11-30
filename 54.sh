@@ -317,31 +317,26 @@ optimize_for_ping() {
     echo -e "${YELLOW}Disabling unnecessary services for better performance...${NC}"
     
     # Check if the service exists before trying to stop/disable it
-    if systemctl list-units --type=service | grep -q 'avahi-daemon.service'; then
-        systemctl stop avahi-daemon
-        systemctl disable avahi-daemon
-        echo -e "${GREEN}avahi-daemon service stopped and disabled.${NC}"
-    fi
-
-    if systemctl list-units --type=service | grep -q 'bluetooth.service'; then
-        systemctl stop bluetooth
-        systemctl disable bluetooth
-        echo -e "${GREEN}bluetooth service stopped and disabled.${NC}"
-    fi
-
-    if systemctl list-units --type=service | grep -q 'apache2.service'; then
-        systemctl stop apache2
-        systemctl disable apache2
-        echo -e "${GREEN}apache2 service stopped and disabled.${NC}"
-    fi
+    for service in avahi-daemon bluetooth apache2; do
+        if systemctl list-units --type=service | grep -q "$service"; then
+            systemctl stop "$service"
+            systemctl disable "$service"
+            echo -e "${GREEN}$service service stopped and disabled.${NC}"
+        fi
+    done
 
     # Adjusting MTU size for better gaming performance
     echo -e "${YELLOW}Optimizing MTU size for gaming...${NC}"
-    ifconfig eth0 mtu 1450 up  # Adjust to your interface (eth0 or wlan0)
+    # Use `ip` command instead of `ifconfig`
+    ip link set dev eth0 mtu 1450
 
     # Enabling TCP/UDP optimizations for lower latency
     echo -e "${YELLOW}Optimizing TCP congestion control algorithm...${NC}"
     sysctl -w net.ipv4.tcp_congestion_control=bbr
+
+    # Clear any previous QoS settings to avoid conflicts
+    echo -e "${YELLOW}Clearing previous QoS settings...${NC}"
+    tc qdisc del dev eth0 root 2>/dev/null
 
     # Apply QoS to prioritize gaming traffic
     echo -e "${YELLOW}Setting up QoS for gaming traffic...${NC}"
@@ -355,6 +350,7 @@ optimize_for_ping() {
     echo -e "${GREEN}Ping and gaming optimizations applied successfully!${NC}"
     echo -e "\n${GREEN}You may need to restart your server for some changes to take effect.${NC}"
 }
+
 
 
 # Main menu for the script
