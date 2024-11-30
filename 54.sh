@@ -63,12 +63,12 @@ install() {
     echo ""
     system_architecture=$(uname -m)
 
-if [ "$system_architecture" != "x86_64" ] && [ "$system_architecture" != "amd64" ]; then
-    echo "Unsupported architecture: $system_architecture"
-    exit 1
-fi
+    if [ "$system_architecture" != "x86_64" ] && [ "$system_architecture" != "amd64" ]; then
+        echo "Unsupported architecture: $system_architecture"
+        exit 1
+    fi
 
-sleep 1
+    sleep 1
     echo ""
     echo -e "${YELLOW}Downloading and installing udp2raw for architecture: $system_architecture${NC}"
 
@@ -76,10 +76,10 @@ sleep 1
         curl -L -o udp2raw https://github.com/yinghuocho/udp2raw/releases/download/v2020.07.09/udp2raw_amd64 -O
     fi
 
-    sleep 1
+    chmod +x udp2raw
+    echo -e "${GREEN}File udp2raw installed successfully!${NC}"
 
-chmod +x udp2raw
-echo -e "${GREEN}File udp2raw installed successfully!${NC}"
+    press_enter
 
     echo ""
     echo -e "${GREEN}Enabling IP forwarding...${NC}"
@@ -137,6 +137,15 @@ optimize_for_gaming() {
     sysctl -p > /dev/null 2>&1
 
     echo -e "${GREEN}System has been optimized for low-latency and gaming.${NC}"
+}
+
+remove_tunnel() {
+    echo -e "${RED}Removing the UDP2RAW tunnel...${NC}"
+    systemctl stop udp2raw-s.service
+    systemctl disable udp2raw-s.service
+    rm /etc/systemd/system/udp2raw-s.service
+    systemctl daemon-reload
+    echo -e "${GREEN}UDP2RAW tunnel removed successfully.${NC}"
 }
 
 remote_func() {
@@ -231,54 +240,80 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
+    sleep 1
     systemctl daemon-reload
     systemctl restart "udp2raw-s.service"
-    systemctl enable "udp2raw-s.service"
-    echo ""
-    echo -e "${CYAN}The server is now running. You can check the status with the command:${NC}"
-    echo -e "${CYAN}systemctl status udp2raw-s.service${NC}"
-    press_enter
+    systemctl enable --now "udp2raw-s.service"
+    systemctl start --now "udp2raw-s.service"
+    sleep 1
+
+    echo -e "\e[92mRemote Server (EU) configuration has been adjusted and service started. Yours truly${NC}"
+echo ""
 }
 
 local_func() {
     clear
     echo ""
-    echo -e "\e[33mSet up the local server for IR${NC}"
+    echo -e "\e[33mSelect IR Tunnel Mode${NC}"
     echo ""
-    echo -ne "Enter the Remote server address (EU) : ${CYAN}"
-    read remote_address
+    echo -e "${RED}1${NC}. ${YELLOW}IPV6${NC}"
+    echo -e "${RED}2${NC}. ${YELLOW}IPV4${NC}"
     echo ""
-    echo -ne "Enter the Remote server port : ${CYAN}"
-    read remote_port
-    echo ""
-    echo -ne "Enter the Password : ${CYAN}"
-    read password
-    echo ""
-    echo -e "\e[33m protocol (Mode) (Local and remote should be the same)${NC}"
-    echo ""
-    echo -e "${RED}1${NC}. ${YELLOW}udp${NC}"
-    echo -e "${RED}2${NC}. ${YELLOW}faketcp${NC}"
-    echo -e "${RED}3${NC}. ${YELLOW}icmp${NC}"
-    echo ""
-    echo -ne "Enter your choice [1-3] : ${NC}"
-    read protocol_choice
+    echo -ne "Enter your choice [1-2] : ${NC}"
+    read tunnel_mode
 
-    case $protocol_choice in
+    case $tunnel_mode in
         1)
-            raw_mode="udp"
+            tunnel_mode="IPV6"
             ;;
         2)
-            raw_mode="faketcp"
-            ;;
-        3)
-            raw_mode="icmp"
+            tunnel_mode="IPV4"
             ;;
         *)
             echo -e "${RED}Invalid choice, choose correctly ...${NC}"
             ;;
     esac
+    while true; do
+        echo -ne "\e[33mEnter the Local server (IR) port \e[92m[Default: 443]${NC}: "
+        read remote_port
+        if [ -z "$remote_port" ]; then
+            remote_port=443
+            break
+        fi
+        if validate_port "$remote_port"; then
+            break
+        fi
+    done
 
-    echo -e "${CYAN}Selected protocol: ${GREEN}$raw_mode${NC}"
+    while true; do
+        echo ""
+        echo -ne "\e[33mEnter the Wireguard port - installed on EU \e[92m[Default: 40600]${NC}: "
+        read local_port
+        if [ -z "$local_port" ]; then
+            local_port=40600
+            break
+        fi
+        if validate_port "$local_port"; then
+            break
+        fi
+    done
+
+    while true; do
+        echo -ne "\e[33mEnter the Password for UDP2RAW \e[92m[This will be used on your local server (IR)]${NC}: "
+        read password
+        if [ -n "$password" ]; then
+            break
+        else
+            echo -e "${RED}Password cannot be empty! Please try again.${NC}"
+        fi
+    done
+
+    echo ""
+    echo -e "${CYAN}Starting UDP2RAW server with the following details:${NC}"
+    echo -e "Protocol: $raw_mode"
+    echo -e "Local server port: $remote_port"
+    echo -e "Wireguard port: $local_port"
+    echo -e "Password: $password"
 
 cat << EOF > /etc/systemd/system/udp2raw-c.service
 [Unit]
@@ -286,7 +321,7 @@ Description=udp2raw-c Service
 After=network.target
 
 [Service]
-ExecStart=/root/udp2raw -c -l 0.0.0.0:${local_port} -r $remote_address:$remote_port -k "${password}" --raw-mode ${raw_mode} -a
+ExecStart=/root/udp2raw -c -l $tunnel_mode:$remote_port -r 127.0.0.1:$local_port -k "${password}" --raw-mode ${raw_mode} -a
 
 Restart=always
 
@@ -294,32 +329,15 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
+    sleep 1
     systemctl daemon-reload
     systemctl restart "udp2raw-c.service"
-    systemctl enable "udp2raw-c.service"
+    systemctl enable --now "udp2raw-c.service"
+    systemctl start --now "udp2raw-c.service"
+    sleep 1
+
+    echo -e "\e[92mLocal Server (IR) configuration has been adjusted and service started. Yours truly${NC}"
     echo ""
-    echo -e "${CYAN}The client is now running. You can check the status with the command:${NC}"
-    echo -e "${CYAN}systemctl status udp2raw-c.service${NC}"
-    press_enter
-}
-
-remove_tunnel() {
-    clear
-    echo -e "${RED}Are you sure you want to remove the tunnel? This will stop and disable the services.${NC}"
-    read -p "Type 'yes' to confirm: " confirm
-
-    if [ "$confirm" == "yes" ]; then
-        systemctl stop udp2raw-s.service
-        systemctl disable udp2raw-s.service
-        rm -f /etc/systemd/system/udp2raw-s.service
-        systemctl stop udp2raw-c.service
-        systemctl disable udp2raw-c.service
-        rm -f /etc/systemd/system/udp2raw-c.service
-        systemctl daemon-reload
-        echo -e "${GREEN}Tunnel removed successfully.${NC}"
-    else
-        echo -e "${RED}Removal canceled.${NC}"
-    fi
 }
 
 clear
@@ -328,12 +346,11 @@ echo -e "${GREEN}-------------------------------------${NC}"
 echo -e "${RED}1${NC}. ${YELLOW}Install UDP2RAW${NC}"
 echo -e "${RED}2${NC}. ${YELLOW}Configure Remote Server (EU)${NC}"
 echo -e "${RED}3${NC}. ${YELLOW}Configure Local Server (IR)${NC}"
-echo -e "${RED}4${NC}. ${YELLOW}Show Status of UDP2RAW Services${NC}"
-echo -e "${RED}5${NC}. ${YELLOW}Optimize System for Gaming and Low-Latency${NC}"
-echo -e "${RED}6${NC}. ${YELLOW}Remove Tunnel${NC}"
+echo -e "${RED}4${NC}. ${YELLOW}Remove UDP2RAW Tunnel${NC}"
+echo -e "${RED}5${NC}. ${YELLOW}Optimize for Gaming${NC}"
 echo -e "${RED}0${NC}. ${YELLOW}Exit${NC}"
 echo -e "${GREEN}-------------------------------------${NC}"
-echo -ne "${CYAN}Enter your choice [0-6]: ${NC}"
+echo -ne "${CYAN}Enter your choice [0-5]: ${NC}"
 
 read choice
 
@@ -348,19 +365,15 @@ case $choice in
         local_func
         ;;
     4)
-        systemctl status "udp2raw-s.service"
-        systemctl status "udp2raw-c.service"
+        remove_tunnel
         ;;
     5)
         optimize_for_gaming
-        ;;
-    6)
-        remove_tunnel
         ;;
     0)
         exit 0
         ;;
     *)
-        echo -e "${RED}Invalid choice, please choose between 0-6.${NC}"
+        echo -e "${RED}Invalid choice, please choose between 0-5.${NC}"
         ;;
 esac
