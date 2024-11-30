@@ -28,22 +28,20 @@ install() {
     echo ""
     apt-get update > /dev/null 2>&1
     apt-get install curl wget build-essential -y > /dev/null 2>&1 # added to ensure curl is installed
-
     echo -e "${GREEN}Packages installed successfully.${NC}"
 
     # Download udp2raw binary
     cd /root
-    wget https://github.com/wangyu-/udp2raw-tunnel/releases/download/v0.20190111/udp2raw_amd64
+    curl -L -o udp2raw_amd64 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_amd64
+    curl -L -o udp2raw_x86 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_x86
     chmod +x udp2raw_amd64
     sudo mv udp2raw_amd64 /usr/local/bin/udp2raw
 
     # Verify installation
-    if ! command -v udp2raw &> /dev/null
-    then
+    if ! command -v udp2raw &> /dev/null; then
         echo -e "${RED}udp2raw installation failed!${NC}"
         exit 1
     fi
-
     echo -e "${GREEN}udp2raw installed successfully.${NC}"
 }
 
