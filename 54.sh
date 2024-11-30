@@ -231,7 +231,6 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-    sleep 1
     systemctl daemon-reload
     systemctl restart "udp2raw-s.service"
     systemctl enable "udp2raw-s.service"
