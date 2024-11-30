@@ -28,34 +28,7 @@ install() {
     echo ""
     apt-get update > /dev/null 2>&1
     apt-get install curl wget -y > /dev/null 2>&1 # added to ensure curl is installed
-    display_fancy_progress 20
-    echo ""
-    system_architecture=$(uname -m)
-
-    if [ "$system_architecture" != "x86_64" ] && [ "$system_architecture" != "amd64" ]; then
-        echo "Unsupported architecture: $system_architecture"
-        exit 1
-    fi
-
-    sleep 1
-    echo ""
-    echo -e "${YELLOW}Downloading and installing udp2raw for architecture: $system_architecture${NC}"
-    curl -L -o udp2raw_amd64 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_amd64
-    curl -L -o udp2raw_x86 https://github.com/amirmbn/UDP2RAW/raw/main/Core/udp2raw_x86
-    sleep 1
-
-    chmod +x udp2raw_amd64
-    chmod +x udp2raw_x86
-
-    echo ""
-    echo -e "${GREEN}Enabling IP forwarding...${NC}"
-    display_fancy_progress 20
-    echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.all.forwarding = 1" >> /etc/sysctl.conf
-    sysctl -p > /dev/null 2>&1
-    ufw reload > /dev/null 2>&1
-    echo ""
-    echo -e "${GREEN}All packages were installed and configured.${NC}"
+    echo -e "${GREEN}Packages installed successfully.${NC}"
 }
 
 remove_tunnel() {
