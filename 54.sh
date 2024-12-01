@@ -21,9 +21,9 @@ display_fancy_progress() {
         echo -ne "\r[${YELLOW}"
         for ((i = 0; i < bar_length; i++)); do
             if [ $i -lt $((progress * bar_length / duration)) ]; then
-                echo -ne "▓"
+                echo -ne "â–“"
             else
-                echo -ne "░"
+                echo -ne "â–‘"
             fi
         done
         echo -ne "${RED}] ${progress}%${NC}"
@@ -458,7 +458,13 @@ game_settings() {
 
     echo -e "${GREEN}Game settings have been applied!${NC}"
     press_enter
-}    
+}
+
+        5)
+            game_settings
+            ;;
+
+        
         1)
             install
             ;;
