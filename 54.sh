@@ -106,7 +106,6 @@ validate_port() {
 
     return 0
 }
-
 remote_func() {
     clear
     echo ""
@@ -207,6 +206,12 @@ EOF
     sleep 1
 
     echo -e "\e[92mRemote Server (EU) configuration has been adjusted and service started. Yours truly${NC}"
+echo ""
+GREEN='\033[0;92m'
+RED='\033[0;91m'
+NC='\033[0m'
+
+echo -e "${GREEN}Make sure to allow port ${RED}$remote_port${GREEN} on your firewall by this command:${RED} ufw allow $remote_port ${NC}"
 }
 
 local_func() {
@@ -256,10 +261,13 @@ local_func() {
         fi
     done
     echo ""
-    echo -ne "\e[33mEnter the Remote server (EU) IPV6 / IPV4 (Based on your tunnel preference)\e[92m[This will be used on your server]${NC}: "
+    echo -ne "\e[33mEnter the Remote server (EU) IPV6 / IPV4 (Based on your tunnel preference)\e[92m${NC}: "
+    read remote_address
+    echo ""
+    echo -ne "\e[33mEnter the Password for UDP2RAW \e[92m[The same as you set on remote server (EU)]${NC}: "
     read password
     echo ""
-    echo -e "\e[33m protocol (Mode) (Local and remote should be the same)${NC}"
+    echo -e "\e[33m protocol (Mode) \e[92m(Local and Remote shoud have the same value)${NC}"
     echo ""
     echo -e "${RED}1${NC}. ${YELLOW}udp${NC}"
     echo -e "${RED}2${NC}. ${YELLOW}faketcp${NC}"
@@ -283,7 +291,13 @@ local_func() {
             ;;
     esac
 
-    echo -e "${CYAN}Selected protocol: ${GREEN}$raw_mode${NC}"
+echo -e "${CYAN}Selected protocol: ${GREEN}$raw_mode${NC}"
+
+if [ "$tunnel_mode" == "IPV4" ]; then
+    exec_start="/root/udp2raw_amd64 -c -l 0.0.0.0:${local_port} -r ${remote_address}:${remote_port} -k ${password} --raw-mode ${raw_mode} -a"
+else
+    exec_start="/root/udp2raw_amd64 -c -l [::]:${local_port} -r [${remote_address}]:${remote_port} -k ${password} --raw-mode ${raw_mode} -a"
+fi
 
 cat << EOF > /etc/systemd/system/udp2raw-c.service
 [Unit]
@@ -291,101 +305,184 @@ Description=udp2raw-c Service
 After=network.target
 
 [Service]
-ExecStart=/root/udp2raw_amd64 -c -l $tunnel_mode:$local_port -r $password:$remote_port -k "${password}" --raw-mode ${raw_mode} -a
-
+ExecStart=${exec_start}
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    sleep 1
-    systemctl daemon-reload
-    systemctl restart "udp2raw-c.service"
-    systemctl enable --now "udp2raw-c.service"
-    systemctl start --now "udp2raw-c.service"
-    sleep 1
-    echo -e "\e[92mYour local (IR) server is running successfully!${NC}"
+sleep 1
+systemctl daemon-reload
+systemctl restart "udp2raw-c.service"
+systemctl enable --now "udp2raw-c.service"
+systemctl start --now "udp2raw-c.service"
+
+echo -e "\e[92mLocal Server (IR) configuration has been adjusted and service started. Yours truly${NC}"
+echo ""
+GREEN='\033[0;92m'
+RED='\033[0;91m'
+NC='\033[0m'
+
+echo -e "${GREEN}Make sure to allow port ${RED}$remote_port${GREEN} on your firewall by this command:${RED} ufw allow $remote_port ${NC}"
 }
 
-optimize_for_ping() {
+uninstall() {
     clear
-    echo -e "\n${CYAN}Optimizing for Low Ping and Gaming Performance...${NC}"
     echo ""
+    echo -e "${YELLOW}Uninstalling UDP2RAW, Please wait ...${NC}"
+    echo ""
+    echo ""
+    display_fancy_progress 20
 
-    # Disabling unnecessary services for network optimization
-    echo -e "${YELLOW}Disabling unnecessary services for better performance...${NC}"
+    systemctl stop --now "udp2raw-s.service" > /dev/null 2>&1
+    systemctl disable --now "udp2raw-s.service" > /dev/null 2>&1
+    systemctl stop --now "udp2raw-c.service" > /dev/null 2>&1
+    systemctl disable --now "udp2raw-c.service" > /dev/null 2>&1
+    rm -f /etc/systemd/system/udp2raw-s.service > /dev/null 2>&1
+    rm -f /etc/systemd/system/udp2raw-c.service > /dev/null 2>&1
+    rm -f /usr/local/bin/udp2raw > /dev/null 2>&1
     
-    # Check if the service exists before trying to stop/disable it
-    for service in avahi-daemon bluetooth apache2; do
-        if systemctl list-units --type=service | grep -q "$service"; then
-            systemctl stop "$service"
-            systemctl disable "$service"
-            echo -e "${GREEN}$service service stopped and disabled.${NC}"
-        fi
-    done
+    sleep 2
+    echo ""
+    echo ""
+    echo -e "${GREEN}UDP2RAW has been uninstalled.${NC}"
+}
 
-    # Adjusting MTU size for better gaming performance
-    echo -e "${YELLOW}Optimizing MTU size for gaming...${NC}"
-    # Use `ip` command instead of `ifconfig`
-    ip link set dev eth0 mtu 1450
 
-    # Enabling TCP/UDP optimizations for lower latency
-    echo -e "${YELLOW}Optimizing TCP congestion control algorithm...${NC}"
+game_settings() {
+    clear
+    echo -e "${YELLOW}Optimizing settings for better game performance...${NC}"
+    
+    # Set TCP Congestion Control Algorithm to BBR for better latency
+    echo -e "${CYAN}Setting TCP congestion control to BBR...${NC}"
     sysctl -w net.ipv4.tcp_congestion_control=bbr
 
-    # Clear any previous QoS settings to avoid conflicts
-    echo -e "${YELLOW}Clearing previous QoS settings...${NC}"
-    tc qdisc del dev eth0 root 2>/dev/null
+    # Adjust kernel parameters for lower latency
+    echo -e "${CYAN}Tweaking kernel parameters for lower latency...${NC}"
+    sysctl -w net.ipv4.tcp_low_latency=1
+    sysctl -w net.core.rmem_max=16777216
+    sysctl -w net.core.wmem_max=16777216
 
-    # Apply QoS to prioritize gaming traffic
-    echo -e "${YELLOW}Setting up QoS for gaming traffic...${NC}"
-    tc qdisc add dev eth0 root handle 1: htb default 12
-    tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit
-    tc class add dev eth0 parent 1:1 classid 1:10 htb rate 100mbit
+    # Set DNS to Google's public DNS for faster resolution
+    echo -e "${CYAN}Setting DNS to Google's public DNS...${NC}"
+    echo "nameserver 8.8.8.8" > /etc/resolv.conf
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf
 
-    # Save changes to sysctl
-    sysctl -p > /dev/null 2>&1
-
-    echo -e "${GREEN}Ping and gaming optimizations applied successfully!${NC}"
-    echo -e "\n${GREEN}You may need to restart your server for some changes to take effect.${NC}"
+    echo -e "${GREEN}Game settings have been applied!${NC}"
+    press_enter
 }
 
 
+menu_status() {
+    systemctl is-active "udp2raw-s.service" &> /dev/null
+    remote_status=$?
 
-# Main menu for the script
-clear
-echo -e "${CYAN}Select an option from the menu:${NC}"
-echo -e "1) Install udp2raw"
-echo -e "2) Setup Remote Tunnel"
-echo -e "3) Setup Local Tunnel"
-echo -e "4) Uninstall udp2raw"
-echo -e "5) Optimize for Low Ping & Gaming Performance"
-echo -e "0) Exit"
-echo -ne "Enter your choice [0-5]: "
-read choice
+    systemctl is-active "udp2raw-c.service" &> /dev/null
+    local_status=$?
 
-case $choice in
-    1)
-        install
-        ;;
-    2)
-        remote_func
-        ;;
-    3)
-        local_func
-        ;;
-    4)
-        uninstall
-        ;;
-    5)
-        optimize_for_ping
-        ;;
-    0)
-        echo -e "\n ${RED}Exiting...${NC}"
-        exit 0
-        ;;
-    *)
-        echo -e "\n ${RED}Invalid choice. Please enter a valid option.${NC}"
-        ;;
-esac
+GREEN='\033[0;92m'
+RED='\033[0;91;1m'
+CYAN='\033[0;96m'
+NC='\033[0m'
+echo ""
+if [ $remote_status -eq 0 ]; then
+    echo -e "\e[36m ${CYAN}EU Server Status${NC} > ${GREEN}Wireguard Tunnel is running.${NC}"
+else
+    echo -e "\e[36m ${CYAN}EU Server Status${NC} > ${RED}Wireguard Tunnel is not running.${NC}"
+fi
+echo ""
+if [ $local_status -eq 0 ]; then
+    echo -e "\e[36m ${CYAN}IR Server Status${NC} > ${GREEN}Wireguard Tunnel is running.${NC}"
+else
+    echo -e "\e[36m ${CYAN}IR Server Status${NC} > ${RED}Wireguard Tunnel is not running.${NC}"
+fi
+}
+echo ""
+while true; do
+    clear    
+    menu_status
+    echo ""
+    echo ""
+    echo -e "\e[36m 1\e[0m) \e[93mInstall UDP2RAW binary"
+    echo -e "\e[36m 2\e[0m) \e[93mSet EU Tunnel"
+    echo -e "\e[36m 3\e[0m) \e[93mSet IR Tunnel"  
+    echo ""
+    
+    echo -e "\e[36m 5\e[0m) \e[93mGame Settings (Optimize for Low Latency)"
+
+    echo -e "\e[36m 4\e[0m) \e[93mUninstall UDP2RAW"
+    echo -e "\e[36m 0\e[0m) \e[93mExit"
+    echo ""
+    echo ""
+    echo -ne "\e[92mSelect an option \e[31m[\e[97m0-4\e[31m]: \e[0m"
+    read choice
+
+    case $choice in
+
+        
+game_settings() {
+    clear
+    echo -e "${YELLOW}Optimizing settings for better game performance...${NC}"
+    
+    # Set TCP Congestion Control Algorithm to BBR for better latency
+    echo -e "${CYAN}Setting TCP congestion control to BBR...${NC}"
+    sysctl -w net.ipv4.tcp_congestion_control=bbr
+
+    # Adjust kernel parameters for lower latency
+    echo -e "${CYAN}Tweaking kernel parameters for lower latency...${NC}"
+    sysctl -w net.ipv4.tcp_low_latency=1
+    sysctl -w net.core.rmem_max=16777216
+    sysctl -w net.core.wmem_max=16777216
+
+    # Set DNS to OpenDNS for faster resolution
+    echo -e "${CYAN}Setting DNS to OpenDNS (208.67.222.220, 208.67.220.222)...${NC}"
+    echo "nameserver 208.67.222.220" > /etc/resolv.conf
+    echo "nameserver 208.67.220.222" >> /etc/resolv.conf
+
+    # Configure MTU for optimized network performance
+    echo -e "${CYAN}Setting MTU to 1472 for optimal performance...${NC}"
+    ifconfig eth0 mtu 1472
+
+    # Set up UDP as a preferred protocol for gaming (lower latency)
+    echo -e "${CYAN}Setting UDP as the preferred protocol...${NC}"
+    sysctl -w net.ipv4.udp_rmem_min=16384
+    sysctl -w net.ipv4.udp_wmem_min=16384
+
+    # Enabling QoS to prioritize gaming traffic
+    echo -e "${CYAN}Enabling QoS for prioritizing gaming traffic...${NC}"
+    tc qdisc add dev eth0 root handle 1: htb default 12
+    tc class add dev eth0 parent 1: classid 1:1 htb rate 100mbit
+    tc class add dev eth0 parent 1:1 classid 1:10 htb rate 50mbit
+    tc class add dev eth0 parent 1:1 classid 1:11 htb rate 50mbit
+
+    echo -e "${GREEN}Game settings have been applied!${NC}"
+    press_enter
+}    
+        1)
+            install
+            ;;
+        2)
+            remote_func
+            ;;
+        3)
+            local_func
+            ;;
+        4)
+            uninstall
+            ;;
+        5)
+            game_settings
+            ;;
+        0)
+            echo -e "\n ${RED}Exiting...${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "\n ${RED}Invalid choice. Please enter a valid option.${NC}"
+            ;;
+    esac
+
+    echo -e "\n ${RED}Press Enter to continue... ${NC}"
+    read
+done
